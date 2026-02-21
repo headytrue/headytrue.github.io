@@ -1,0 +1,49 @@
+{
+  "_readme": "Crystal Run — Game Configuration File",
+  "_instructions": [
+    "This file controls ALL audio for the game.",
+    "To change a sound: replace the 'src' value with a URL or local path.",
+    "  URL example  : 'https://example.com/sounds/jump.mp3'",
+    "  Local example: './sounds/jump.wav'   (file must be in same folder as the HTML)",
+    "Volume range: 0.0 (silent) to 1.0 (full volume).",
+    "Music 'loop': true = loops forever, false = plays once.",
+    "DO NOT rename the top-level keys (music / sfx) — the game reads them by name.",
+    "You MAY add new sfx keys; call them with playSound('yourKey') in the JS."
+  ],
+
+  "audio": {
+
+    "music": {
+      "bg": {
+        "_note"  : "Background loop — plays while the game is running",
+        "src"    : "https://cdn.pixabay.com/audio/2022/01/18/audio_d0c6ff1c2a.mp3",
+        "volume" : 0.3,
+        "loop"   : true
+      }
+    },
+
+    "sfx": {
+      "jump": {
+        "_note"  : "Played every time the player jumps or double-jumps",
+        "src"    : "https://cdn.pixabay.com/audio/2022/03/24/audio_5b11442c7a.mp3",
+        "volume" : 0.5
+      },
+      "land": {
+        "_note"  : "Played when the player lands back on the ground",
+        "src"    : "https://cdn.pixabay.com/audio/2021/08/04/audio_c518e2e212.mp3",
+        "volume" : 0.28
+      },
+      "coin": {
+        "_note"  : "Played when the player collects a glowing crystal coin",
+        "src"    : "https://cdn.pixabay.com/audio/2024/01/15/audio_6bf1fc0898.mp3",
+        "volume" : 0.55
+      },
+      "hit": {
+        "_note"  : "Played on death — when the player hits an enemy or obstacle",
+        "src"    : "https://cdn.pixabay.com/audio/2022/03/10/audio_c0bbe45200.mp3",
+        "volume" : 0.6
+      }
+    }
+
+  }
+}

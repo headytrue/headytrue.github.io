@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crystal Run — Fantasy Endless Runner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Crimson+Text:ital@0;1&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0612;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Crimson Text', serif;
+    overflow: hidden;
+  }
+
+  #canvas-wrap {
+    position: relative;
+    width: min(100vw, calc(100vh * 16/9));
+    aspect-ratio: 16/9;
+  }
+
+  #gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 2px solid #4a2d6e;
+    box-shadow: 0 0 60px #7c3aed55, 0 0 120px #3b0764aa;
+  }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 18px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .hud-box {
+    background: rgba(10,6,18,0.72);
+    border: 1px solid #7c3aed55;
+    border-radius: 6px;
+    padding: 6px 14px;
+    color: #e2d4f0;
+    font-family: 'Cinzel', serif;
+    font-size: clamp(11px, 1.8vw, 18px);
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 8px #a78bfa;
+  }
+
+  .hud-box span { color: #c4b5fd; }
+  #coinHud span { color: #f0abfc; text-shadow: 0 0 10px #e879f9; }
+
+  /* ---- Overlays ---- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 40%, #1e0a3c99 0%, #0a061299 100%);
+    z-index: 20;
+    gap: 14px;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .overlay.hidden { display: none; }
+
+  .overlay h1 {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(22px, 5vw, 52px);
+    font-weight: 900;
+    color: #e9d5ff;
+    text-shadow: 0 0 20px #a855f7, 0 0 40px #7c3aed;
+    letter-spacing: 0.12em;
+    line-height: 1.1;
+  }
+
+  .overlay h2 {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(14px, 3vw, 28px);
+    color: #c4b5fd;
+    letter-spacing: 0.1em;
+  }
+
+  .overlay p {
+    font-size: clamp(12px, 2vw, 18px);
+    color: #a78bfa99;
+    max-width: 440px;
+    line-height: 1.6;
+  }
+
+  .btn {
+    margin-top: 8px;
+    font-family: 'Cinzel', serif;
+    font-size: clamp(13px, 2vw, 18px);
+    letter-spacing: 0.1em;
+    color: #0a0612;
+    background: linear-gradient(135deg, #a855f7, #7c3aed);
+    border: none;
+    border-radius: 6px;
+    padding: clamp(8px,1.5vw,14px) clamp(22px,4vw,42px);
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    box-shadow: 0 0 18px #7c3aedaa;
+    pointer-events: all;
+  }
+
+  .btn:hover  { transform: scale(1.05); box-shadow: 0 0 28px #a855f7; }
+  .btn:active { transform: scale(0.97); }
+
+  .stat-line {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(12px, 2vw, 17px);
+    color: #c4b5fd;
+  }
+
+  .crystal-divider {
+    width: 60%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #7c3aed, transparent);
+    margin: 4px 0;
+  }
+
+  #touch-hint {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #7c3aed88;
+    font-family: 'Cinzel', serif;
+    font-size: clamp(9px, 1.5vw, 13px);
+    letter-spacing: 0.08em;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Banner shown if config.json fails to load */
+  #configError {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: #7f1d1d;
+    color: #fca5a5;
+    font-family: 'Cinzel', serif;
+    font-size: clamp(9px, 1.3vw, 12px);
+    text-align: center;
+    padding: 5px 10px;
+    z-index: 30;
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="configError"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-box">SCORE <span id="scoreDisplay">0</span></div>
+    <div class="hud-box" id="coinHud">✦ <span id="coinDisplay">0</span></div>
+    <div class="hud-box">BEST <span id="bestDisplay">0</span></div>
+    <div class="hud-box">SPEED <span id="speedDisplay">1.0x</span></div>
+  </div>
+
+  <!-- Start Screen -->
+  <div class="overlay" id="startScreen">
+    <h1>CRYSTAL RUN</h1>
+    <div class="crystal-divider"></div>
+    <h2>Fantasy Endless Runner</h2>
+    <p>Collect the glowing crystals.<br>Dodge obstacles. Outrun the shadow wraiths.</p>
+    <div class="crystal-divider"></div>
+    <p><em>SPACE / UP to jump &nbsp;•&nbsp; Double-jump allowed &nbsp;•&nbsp; Tap on mobile</em></p>
+    <button class="btn" id="startBtn">BEGIN JOURNEY</button>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div class="overlay hidden" id="gameOverScreen">
+    <h1>FALLEN</h1>
+    <div class="crystal-divider"></div>
+    <p class="stat-line">DISTANCE SURVIVED</p>
+    <h2 id="finalScore">0</h2>
+    <p class="stat-line">CRYSTALS COLLECTED</p>
+    <h2 id="finalCoins">0</h2>
+    <p class="stat-line">BEST RUN</p>
+    <h2 id="finalBest">0</h2>
+    <div class="crystal-divider"></div>
+    <button class="btn" id="restartBtn">RUN AGAIN</button>
+  </div>
+
+  <div id="touch-hint">TAP TO JUMP</div>
+</div>
+
+<script>
+/* ================================================================
+   CRYSTAL RUN  v3 — Fantasy 2D Endless Runner
+   Single HTML file  |  Audio & tuning via config.json
+
+   FOLDER STRUCTURE (for local use):
+     index.html       ← this file
+     config.json      ← edit this to change audio paths / volumes
+     music/
+       background.mp3
+     sfx/
+       jump.mp3  land.mp3  coin.mp3  hit.mp3
+
+   SECTION MAP:
+    1.  Canvas Setup
+    2.  Config Loader       — fetches config.json, falls back to silent defaults
+    3.  Game Constants      — assigned from CONFIG after load
+    4.  Game State
+    5.  Drawing Helpers
+    6.  Player
+    7.  Obstacle System
+    8.  Enemy (Wraith) System
+    9.  Crystal Coin System
+   10.  Particle System
+   11.  Background / Parallax
+   12.  Camera
+   13.  Collision Detection
+   14.  Score & Difficulty
+   15.  Audio System        — reads CONFIG.audio, never hardcodes a path
+   16.  Game Loop
+   17.  Death & Restart
+   18.  Input Handling
+   19.  UI Management
+   20.  Boot
+================================================================ */
+
+
+// ================================================================
+// 1. CANVAS SETUP
+// ================================================================
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+const BASE_W = 960;
+const BASE_H = 540;
+
+function resizeCanvas() { canvas.width = BASE_W; canvas.height = BASE_H; }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+
+// ================================================================
+// 2. CONFIG LOADER
+// ================================================================
+// On startup the game fetches config.json.
+// If it loads successfully, audio paths and game values come from there.
+// If it fails (e.g. opened as a file:// without a local server),
+// the game falls back to the silent defaults below so it still runs.
+// ----------------------------------------------------------------
+
+const CONFIG_DEFAULTS = {
+  audio: {
+    music: {
+      bg: { src: '', volume: 0.35, loop: true, enabled: false }
+    },
+    sfx: {
+      jump: { src: '', volume: 0.55, enabled: false },
+      land: { src: '', volume: 0.30, enabled: false },
+      coin: { src: '', volume: 0.65, enabled: false },
+      hit:  { src: '', volume: 0.70, enabled: false }
+    }
+  },
+  game: {
+    startSpeed: 4, maxSpeed: 12,
+    gravity: 0.55, jumpVelocity: -13,
+    allowDoubleJump: true,
+    coins:     { spawnIntervalMin: 90,  spawnIntervalMax: 180, scoreValue: 10, floatAmplitude: 8,  floatSpeed: 0.06 },
+    obstacles: { spawnIntervalMin: 70,  spawnIntervalMax: 140 },
+    enemies:   { spawnInterval: 300 }
+  }
+};
+
+// Live config object — starts as defaults, overwritten from config.json
+let CONFIG = JSON.parse(JSON.stringify(CONFIG_DEFAULTS));
+
+// Deep-merge helper: source values overwrite target, missing keys kept
+function deepMerge(target, source) {
+  for (const key in source) {
+    if (key.startsWith('_')) continue; // Skip comment keys
+    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      if (!target[key]) target[key] = {};
+      deepMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+}
+
+// configReady resolves when config.json is either loaded or failed
+const configReady = (async () => {
+  try {
+    const res = await fetch('./config.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    deepMerge(CONFIG, data);
+    console.log('[Crystal Run] config.json loaded successfully.');
+  } catch (err) {
+    const banner = document.getElementById('configError');
+    banner.style.display = 'block';
+    banner.textContent =
+      '⚠  config.json not found — audio disabled. ' +
+      'Serve via a local server (e.g. VS Code Live Server) to enable audio & custom settings.';
+    console.warn('[Crystal Run] config.json load failed:', err.message);
+  }
+})();
+
+
+// ================================================================
+// 3. GAME CONSTANTS  — assigned from CONFIG inside applyConfig()
+// ================================================================
+let GROUND_Y;               // Y coordinate of the ground surface
+let GRAVITY;                // Downward acceleration per frame
+let JUMP_VEL;               // Initial upward velocity on jump
+const PLAYER_X = 120;       // Player's fixed screen X (camera scrolls world)
+let OBSTACLE_INTERVAL_MIN;
+let OBSTACLE_INTERVAL_MAX;
+let ENEMY_SPAWN_INTERVAL;
+let COIN_CFG;               // Shortcut to CONFIG.game.coins
+
+function applyConfig() {
+  const g              = CONFIG.game;
+  GROUND_Y             = BASE_H * 0.72;
+  GRAVITY              = g.gravity;
+  JUMP_VEL             = g.jumpVelocity;
+  OBSTACLE_INTERVAL_MIN = g.obstacles.spawnIntervalMin;
+  OBSTACLE_INTERVAL_MAX = g.obstacles.spawnIntervalMax;
+  ENEMY_SPAWN_INTERVAL  = g.enemies.spawnInterval;
+  COIN_CFG             = g.coins;
+}
+
+
+// ================================================================
+// 4. GAME STATE
+// ================================================================
+let state             = 'start';  // 'start' | 'playing' | 'dead'
+let score             = 0;
+let bestScore         = 0;
+let coinCount         = 0;        // Crystals collected this run
+let frameCount        = 0;
+let gameSpeed         = 4;
+let distanceTravelled = 0;
+let cameraX           = 0;        // World scroll offset
+
+// Spawn timers (reset in startGame)
+let nextObstacleIn = 80;
+let nextEnemyIn;
+let nextCoinIn;
+let animId = null;
+
+
+// ================================================================
+// 5. DRAWING HELPERS
+// ================================================================
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function hsl(h, s, l) { return `hsl(${h},${s}%,${l}%)`; }
+
+
+// ================================================================
+// 6. PLAYER
+// ================================================================
+const player = {
+  worldX: 0, y: 0,
+  w: 36, h: 52,
+  vy: 0, onGround: true, jumpsLeft: 2,
+  runFrame: 0, runTimer: 0, capePhase: 0,
+
+  reset() {
+    this.worldX    = 0;
+    this.y         = GROUND_Y;
+    this.vy        = 0;
+    this.onGround  = true;
+    this.jumpsLeft = CONFIG.game.allowDoubleJump ? 2 : 1;
+    this.runFrame  = 0;
+    this.runTimer  = 0;
+    this.capePhase = 0;
+  },
+
+  jump() {
+    if (this.jumpsLeft > 0) {
+      this.vy       = JUMP_VEL;
+      this.onGround = false;
+      this.jumpsLeft--;
+      spawnParticles(PLAYER_X + this.w / 2, this.y + this.h, 8, 'jump');
+      playSound('jump');
+    }
+  },
+
+  update() {
+    this.vy += GRAVITY;
+    this.y  += this.vy;
+
+    if (this.y >= GROUND_Y) {
+      const wasAir   = !this.onGround;
+      this.y         = GROUND_Y;
+      this.vy        = 0;
+      this.onGround  = true;
+      this.jumpsLeft = CONFIG.game.allowDoubleJump ? 2 : 1;
+      if (wasAir) playSound('land');
+    }
+
+    this.worldX += gameSpeed;
+
+    this.runTimer++;
+    if (this.runTimer > 6) {
+      this.runTimer = 0;
+      this.runFrame = (this.runFrame + 1) % 4;
+    }
+    this.capePhase += 0.12;
+
+    if (this.onGround && frameCount % 8 === 0) {
+      spawnParticles(PLAYER_X + 4, this.y + this.h, 2, 'dust');
+    }
+  },
+
+  draw() {
+    const sx = PLAYER_X;
+    const sy = this.y;
+    ctx.save();
+
+    // Cape
+    const sw = Math.sin(this.capePhase) * 4;
+    const cg = ctx.createLinearGradient(sx - 10, sy, sx - 10, sy + this.h);
+    cg.addColorStop(0, '#7c3aed'); cg.addColorStop(1, '#4c1d95aa');
+    ctx.fillStyle = cg;
+    ctx.beginPath();
+    ctx.moveTo(sx + 8, sy + 10);
+    ctx.quadraticCurveTo(sx - 14 + sw, sy + this.h * 0.6, sx - 4, sy + this.h + sw * 0.5);
+    ctx.lineTo(sx + 14, sy + this.h);
+    ctx.closePath(); ctx.fill();
+
+    // Body
+    const bg2 = ctx.createLinearGradient(sx, sy, sx + this.w, sy);
+    bg2.addColorStop(0, '#c4b5fd'); bg2.addColorStop(1, '#8b5cf6');
+    roundRect(sx, sy, this.w, this.h * 0.65, 6);
+    ctx.fillStyle = bg2; ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    roundRect(sx + 4, sy + 4, this.w - 8, 10, 3); ctx.fill();
+
+    // Legs
+    const lOff = [[4,0],[8,-6],[4,0],[-2,-4]];
+    const [lo] = lOff[this.runFrame];
+    const ly   = sy + this.h * 0.65;
+    const lh   = this.h * 0.35;
+    ctx.fillStyle = '#6d28d9';
+    roundRect(sx + 4, ly + lo, 10, lh, 4);           ctx.fill();
+    roundRect(sx + this.w - 14, ly - lo, 10, lh, 4); ctx.fill();
+    ctx.fillStyle = '#1e1b4b';
+    ctx.fillRect(sx + 2,           ly + lo + lh - 6, 13, 7);
+    ctx.fillRect(sx + this.w - 16, ly - lo + lh - 6, 13, 7);
+
+    // Helmet
+    const hy  = sy - 28;
+    const hg  = ctx.createRadialGradient(sx + this.w/2 - 3, hy + 4, 2, sx + this.w/2, hy + 12, 14);
+    hg.addColorStop(0, '#ddd6fe'); hg.addColorStop(1, '#7c3aed');
+    ctx.fillStyle = hg;
+    roundRect(sx + 4, hy, this.w - 8, 26, 8); ctx.fill();
+    ctx.fillStyle = '#2e1065';
+    roundRect(sx + 8, hy + 10, this.w - 16, 6, 3); ctx.fill();
+    ctx.fillStyle = '#a78bfa';
+    ctx.fillRect(sx + 8, hy + 11, this.w - 16, 3);
+    ctx.fillStyle = '#f5d0fe';
+    roundRect(sx + this.w/2 - 3, hy - 5, 6, 10, 2); ctx.fill();
+
+    // Chest gem
+    ctx.fillStyle = '#e879f9'; ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 8;
+    roundRect(sx + this.w/2 - 5, sy + 18, 10, 10, 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+};
+
+
+// ================================================================
+// 7. OBSTACLE SYSTEM
+// ================================================================
+const obstacles = [];
+const OBSTACLE_TYPES = [
+  { w: 28, h: 52, color: '#312e81', top: '#818cf8', label: 'crystal' },
+  { w: 44, h: 36, color: '#1e1b4b', top: '#6d28d9', label: 'rock'    },
+  { w: 20, h: 68, color: '#3b0764', top: '#a855f7', label: 'spike'   },
+];
+
+function spawnObstacle() {
+  const t = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
+  obstacles.push({ worldX: player.worldX + BASE_W + 40, w: t.w, h: t.h,
+                   color: t.color, top: t.top, label: t.label,
+                   glowPhase: Math.random() * Math.PI * 2 });
+}
+
+function updateObstacles() {
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    obstacles[i].glowPhase += 0.05;
+    if (obstacles[i].worldX - cameraX < -100) obstacles.splice(i, 1);
+  }
+  nextObstacleIn--;
+  if (nextObstacleIn <= 0) {
+    spawnObstacle();
+    nextObstacleIn = Math.max(45, Math.floor(
+      OBSTACLE_INTERVAL_MIN + Math.random() * (OBSTACLE_INTERVAL_MAX - OBSTACLE_INTERVAL_MIN)
+    ) - (gameSpeed - 4) * 4);
+  }
+}
+
+function drawObstacles() {
+  for (const o of obstacles) {
+    const sx    = o.worldX - cameraX;
+    const sy    = GROUND_Y + player.h - o.h;
+    const pulse = (Math.sin(o.glowPhase) + 1) * 0.5;
+    ctx.save();
+    ctx.shadowColor = o.top; ctx.shadowBlur = 10 + pulse * 10;
+
+    if (o.label === 'crystal') {
+      ctx.fillStyle = o.color;
+      ctx.beginPath();
+      ctx.moveTo(sx + o.w/2, sy); ctx.lineTo(sx + o.w, sy + o.h*0.4);
+      ctx.lineTo(sx + o.w*0.7, sy + o.h); ctx.lineTo(sx + o.w*0.3, sy + o.h);
+      ctx.lineTo(sx, sy + o.h*0.4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = o.top + '88';
+      ctx.beginPath(); ctx.moveTo(sx + o.w/2, sy+2);
+      ctx.lineTo(sx + o.w/2+6, sy + o.h*0.3); ctx.lineTo(sx + o.w/2, sy + o.h*0.5);
+      ctx.closePath(); ctx.fill();
+
+    } else if (o.label === 'rock') {
+      ctx.fillStyle = o.color; roundRect(sx, sy, o.w, o.h, 10); ctx.fill();
+      ctx.fillStyle = o.top + '66'; roundRect(sx+4, sy+4, o.w-8, o.h*0.4, 6); ctx.fill();
+
+    } else { // spike
+      ctx.fillStyle = o.color;
+      ctx.beginPath(); ctx.moveTo(sx + o.w/2, sy);
+      ctx.lineTo(sx + o.w, sy + o.h); ctx.lineTo(sx, sy + o.h); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = o.top;
+      ctx.beginPath(); ctx.moveTo(sx + o.w/2, sy+4);
+      ctx.lineTo(sx + o.w/2+4, sy + o.h*0.35); ctx.lineTo(sx + o.w/2, sy + o.h*0.6);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.shadowBlur = 0; ctx.restore();
+  }
+}
+
+
+// ================================================================
+// 8. ENEMY (WRAITH) SYSTEM
+// ================================================================
+const enemies = [];
+
+function spawnEnemy() {
+  enemies.push({ worldX: player.worldX - 80, y: GROUND_Y, w: 38, h: 54,
+                 speed: gameSpeed * 0.78, phase: Math.random() * Math.PI * 2,
+                 alive: true, alphaFade: 1 });
+}
+
+function updateEnemies() {
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e  = enemies[i];
+    const dx = (player.worldX - 60) - e.worldX;
+    e.worldX += Math.min(dx * 0.03 + e.speed * 0.4, e.speed);
+    e.phase  += 0.07;
+    if (!e.alive) { e.alphaFade -= 0.04; if (e.alphaFade <= 0) enemies.splice(i, 1); }
+    if (e.worldX - cameraX > BASE_W + 200) enemies.splice(i, 1);
+  }
+  nextEnemyIn--;
+  if (nextEnemyIn <= 0) {
+    spawnEnemy();
+    nextEnemyIn = Math.max(180, ENEMY_SPAWN_INTERVAL - score * 0.5);
+  }
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    const sx  = e.worldX - cameraX;
+    const bob = Math.sin(e.phase) * 5;
+    const sy  = e.y - 4 + bob;
+    ctx.save();
+    ctx.globalAlpha = e.alphaFade;
+    ctx.shadowColor = '#be185d'; ctx.shadowBlur = 20 + Math.abs(bob)*2;
+
+    const g = ctx.createRadialGradient(sx+e.w/2, sy+e.h/2, 4, sx+e.w/2, sy+e.h/2, 26);
+    g.addColorStop(0, '#fce7f3cc'); g.addColorStop(1, '#be185d88');
+    ctx.fillStyle = g; roundRect(sx, sy, e.w, e.h*0.7, 14); ctx.fill();
+
+    for (let t = 0; t < 3; t++) {
+      const tx  = sx + 6 + t*12, ty = sy + e.h*0.65;
+      const tsw = Math.sin(e.phase + t*1.2) * 5;
+      ctx.fillStyle = '#be185d55';
+      ctx.beginPath(); ctx.moveTo(tx, ty);
+      ctx.quadraticCurveTo(tx+tsw, ty+20, tx+tsw*0.5, ty+35);
+      ctx.lineTo(tx+8+tsw*0.5, ty+35);
+      ctx.quadraticCurveTo(tx+8+tsw, ty+20, tx+8, ty); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#ff49db'; ctx.shadowColor = '#ff49db'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(sx+10, sy+18, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx+e.w-10, sy+18, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1f0010';
+    ctx.fillRect(sx+8, sy+16, 4, 5); ctx.fillRect(sx+e.w-12, sy+16, 4, 5);
+    ctx.shadowBlur = 0; ctx.restore();
+  }
+}
+
+
+// ================================================================
+// 9. CRYSTAL COIN SYSTEM
+// ================================================================
+// Glowing gem-shaped collectibles that float above the ground.
+// Coins float in a sine wave. Collecting adds scoreValue points.
+//
+// Coin object fields:
+//   worldX      — horizontal world-space position
+//   baseY       — vertical centre of the float path
+//   phase       — current float phase (incremented each frame)
+//   size        — gem radius in px
+//   hue         — colour hue (purple–pink range for variety)
+//   collected   — true once the player touches it
+//   alpha       — fades to 0 after collection, then removed
+// ----------------------------------------------------------------
+const coins = [];
+const COIN_HEIGHTS = [70, 110, 150, 90, 130]; // Heights above ground surface
+
+function spawnCoin() {
+  // 35% chance to spawn a short cluster of 2-3 coins in a line
+  const count  = Math.random() < 0.35 ? Math.floor(Math.random() * 2) + 2 : 1;
+  const baseX  = player.worldX + BASE_W + 60;
+  const height = COIN_HEIGHTS[Math.floor(Math.random() * COIN_HEIGHTS.length)];
+  const hue    = 260 + Math.random() * 80; // Purple-to-pink
+
+  for (let i = 0; i < count; i++) {
+    coins.push({
+      worldX   : baseX + i * 40,
+      baseY    : GROUND_Y - height,
+      phase    : Math.random() * Math.PI * 2,
+      size     : 11 + Math.random() * 5,
+      hue,
+      collected: false,
+      alpha    : 1,
+    });
+  }
+}
+
+function updateCoins() {
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i];
+    if (c.collected) { c.alpha -= 0.07; if (c.alpha <= 0) coins.splice(i, 1); continue; }
+    c.phase += COIN_CFG.floatSpeed;
+    if (c.worldX - cameraX < -60) coins.splice(i, 1);
+  }
+  nextCoinIn--;
+  if (nextCoinIn <= 0) {
+    spawnCoin();
+    nextCoinIn = Math.floor(
+      COIN_CFG.spawnIntervalMin +
+      Math.random() * (COIN_CFG.spawnIntervalMax - COIN_CFG.spawnIntervalMin)
+    );
+  }
+}
+
+// drawCoin — renders a hex-gem with facets, glow, highlight, and sparkle cross
+function drawCoin(c) {
+  const sx    = c.worldX - cameraX;
+  const bob   = Math.sin(c.phase) * COIN_CFG.floatAmplitude;
+  const sy    = c.baseY + bob;
+  const s     = c.size;
+  const pulse = (Math.sin(c.phase * 2) + 1) * 0.5;
+
+  ctx.save();
+  ctx.globalAlpha = c.alpha;
+
+  // Outer glow
+  ctx.shadowColor = hsl(c.hue, 90, 70);
+  ctx.shadowBlur  = 14 + pulse * 12;
+
+  // Gem body (hexagonal diamond)
+  const gg = ctx.createRadialGradient(sx - s*0.2, sy - s*0.3, 1, sx, sy, s*1.1);
+  gg.addColorStop(0,   hsl(c.hue, 60, 90));
+  gg.addColorStop(0.4, hsl(c.hue, 80, 65));
+  gg.addColorStop(1,   hsl(c.hue, 90, 30));
+  ctx.fillStyle = gg;
+  ctx.beginPath();
+  ctx.moveTo(sx,           sy - s);
+  ctx.lineTo(sx + s*0.7,  sy - s*0.3);
+  ctx.lineTo(sx + s*0.7,  sy + s*0.2);
+  ctx.lineTo(sx,           sy + s);
+  ctx.lineTo(sx - s*0.7,  sy + s*0.2);
+  ctx.lineTo(sx - s*0.7,  sy - s*0.3);
+  ctx.closePath(); ctx.fill();
+
+  // Top highlight facet
+  ctx.fillStyle = `rgba(255,255,255,${0.25 + pulse*0.2})`;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy - s); ctx.lineTo(sx + s*0.7, sy - s*0.3);
+  ctx.lineTo(sx, sy - s*0.1); ctx.lineTo(sx - s*0.7, sy - s*0.3);
+  ctx.closePath(); ctx.fill();
+
+  // Bottom shadow facet
+  ctx.fillStyle = `rgba(0,0,0,${0.2 + pulse*0.1})`;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy + s); ctx.lineTo(sx + s*0.7, sy + s*0.2);
+  ctx.lineTo(sx, sy + s*0.1); ctx.lineTo(sx - s*0.7, sy + s*0.2);
+  ctx.closePath(); ctx.fill();
+
+  // Sparkle cross (rotates slowly)
+  ctx.shadowBlur = 0;
+  ctx.save();
+  ctx.translate(sx, sy); ctx.rotate(c.phase * 0.5);
+  ctx.strokeStyle = `rgba(255,255,255,${0.55 + pulse*0.35})`;
+  ctx.lineWidth   = 1.5;
+  const sl = s * 1.65;
+  for (let a = 0; a < 4; a++) {
+    const ang = (a / 4) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(ang) * sl, Math.sin(ang) * sl); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawCoins() { for (const c of coins) drawCoin(c); }
+
+// Circular proximity check — more natural feel than AABB for small orbs
+function checkCoinCollect() {
+  const px = PLAYER_X + player.w / 2;
+  const py = player.y  + player.h / 2;
+
+  for (const c of coins) {
+    if (c.collected) continue;
+    const sx   = c.worldX - cameraX;
+    const cy   = c.baseY + Math.sin(c.phase) * COIN_CFG.floatAmplitude;
+    const dist = Math.hypot(sx - px, cy - py);
+    if (dist < player.w * 0.5 + c.size * 0.8) {
+      c.collected = true;
+      coinCount++;
+      score += COIN_CFG.scoreValue;
+      spawnParticles(sx, cy, 12, 'coin', c.hue);
+      playSound('coin');
+    }
+  }
+}
+
+
+// ================================================================
+// 10. PARTICLE SYSTEM
+// ================================================================
+const particles = [];
+
+function spawnParticles(x, y, count, type, hue = 290) {
+  for (let i = 0; i < count; i++) {
+    const p = { x, y, life: 1, type };
+    if (type === 'jump') {
+      p.vx = (Math.random()-0.5)*4; p.vy = Math.random()*-3-1;
+      p.size = 4+Math.random()*4;
+      p.color = Math.random()>0.5 ? '#a78bfa' : '#e879f9';
+    } else if (type === 'dust') {
+      p.vx = (Math.random()-0.7)*2; p.vy = Math.random()*-1;
+      p.size = 3+Math.random()*3; p.color = '#7c3aed44';
+    } else if (type === 'death') {
+      p.vx = (Math.random()-0.5)*8; p.vy = Math.random()*-7-2;
+      p.size = 5+Math.random()*8;
+      p.color = Math.random()>0.5 ? '#f43f5e' : '#fbbf24';
+    } else if (type === 'coin') {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 2 + Math.random() * 4;
+      p.vx = Math.cos(ang)*spd; p.vy = Math.sin(ang)*spd - 1;
+      p.size = 3+Math.random()*5; p.color = hsl(hue, 80, 70);
+    }
+    particles.push(p);
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= 0.03;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size*p.life, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+
+// ================================================================
+// 11. BACKGROUND / PARALLAX
+// ================================================================
+const stars = [];
+(function() {
+  for (let i = 0; i < 120; i++) stars.push({
+    x: Math.random()*BASE_W, y: Math.random()*BASE_H*0.65,
+    r: Math.random()*1.5+0.3, twinkle: Math.random()*Math.PI*2,
+    speed: 0.05 + Math.random()*0.15
+  });
+})();
+
+const mountains = [
+  { pts:[[0,380],[120,260],[240,310],[360,200],[480,280],[600,240],[720,300],[840,230],[960,320],[960,400],[0,400]], color:'#1a0a2e', speed:0.15 },
+  { pts:[[0,410],[100,330],[200,360],[320,280],[420,340],[520,300],[640,360],[760,290],[860,350],[960,410],[960,420],[0,420]], color:'#2d1457', speed:0.3 },
+];
+
+const bgCrystals = [];
+(function() {
+  for (let i = 0; i < 14; i++) bgCrystals.push({
+    worldX: i*140+Math.random()*80, y: 80+Math.random()*180,
+    h: 30+Math.random()*60, w: 10+Math.random()*16,
+    hue: 260+Math.random()*60, phase: Math.random()*Math.PI*2
+  });
+})();
+
+function drawBackground() {
+  const sky = ctx.createLinearGradient(0, 0, 0, BASE_H*0.72);
+  sky.addColorStop(0, '#030008'); sky.addColorStop(0.5, '#0f0520'); sky.addColorStop(1, '#1e0a3c');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, BASE_W, BASE_H);
+
+  for (const s of stars) {
+    s.twinkle += 0.03;
+    const sx    = ((s.x - cameraX*s.speed) % BASE_W + BASE_W) % BASE_W;
+    ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(s.twinkle)*0.4;
+    ctx.fillStyle = '#e9d5ff'; ctx.beginPath(); ctx.arc(sx, s.y, s.r, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.shadowColor = '#c4b5fd'; ctx.shadowBlur = 30; ctx.fillStyle = '#f5f3ff';
+  ctx.beginPath(); ctx.arc(BASE_W*0.82, 80, 38, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#0f0520';
+  ctx.beginPath(); ctx.arc(BASE_W*0.82+14, 76, 34, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.restore();
+
+  for (const m of mountains) {
+    const ox = -(cameraX*m.speed) % (BASE_W+200);
+    ctx.save(); ctx.fillStyle = m.color;
+    for (let r = -1; r <= 1; r++) {
+      ctx.beginPath();
+      ctx.moveTo(m.pts[0][0]+ox+r*BASE_W, m.pts[0][1]);
+      for (let j = 1; j < m.pts.length; j++) ctx.lineTo(m.pts[j][0]+ox+r*BASE_W, m.pts[j][1]);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  for (const c of bgCrystals) {
+    c.phase += 0.012;
+    const sx  = (c.worldX - cameraX*0.4) % (BASE_W+200) - 50;
+    const bob = Math.sin(c.phase)*6;
+    ctx.save();
+    ctx.globalAlpha = 0.25 + Math.sin(c.phase*0.7)*0.1;
+    ctx.fillStyle = hsl(c.hue,70,50); ctx.shadowColor = hsl(c.hue,90,70); ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(sx+c.w/2, bob+c.y-c.h/2); ctx.lineTo(sx+c.w, bob+c.y);
+    ctx.lineTo(sx+c.w/2, bob+c.y+c.h/2); ctx.lineTo(sx, bob+c.y); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; ctx.restore();
+  }
+}
+
+function drawGround() {
+  const gg = ctx.createLinearGradient(0, GROUND_Y+player.h, 0, BASE_H);
+  gg.addColorStop(0, '#2d1457'); gg.addColorStop(1, '#0a0612');
+  ctx.fillStyle = gg; ctx.fillRect(0, GROUND_Y+player.h, BASE_W, BASE_H);
+
+  ctx.save();
+  ctx.shadowColor = '#7c3aed'; ctx.shadowBlur = 12;
+  ctx.strokeStyle = '#7c3aed'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y+player.h); ctx.lineTo(BASE_W, GROUND_Y+player.h); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.restore();
+
+  const tileW = 60, ox = cameraX % tileW;
+  ctx.save(); ctx.strokeStyle = '#4c1d9544'; ctx.lineWidth = 1;
+  for (let tx = -ox; tx < BASE_W; tx += tileW) {
+    ctx.beginPath(); ctx.moveTo(tx, GROUND_Y+player.h); ctx.lineTo(tx, GROUND_Y+player.h+20); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+
+// ================================================================
+// 12. CAMERA
+// ================================================================
+function updateCamera() { cameraX = player.worldX - PLAYER_X; }
+
+
+// ================================================================
+// 13. COLLISION DETECTION
+// ================================================================
+function getPlayerRect() {
+  return { x: PLAYER_X+6, y: player.y+4, w: player.w-12, h: player.h-4 };
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function checkCollisions() {
+  const pr = getPlayerRect();
+  for (const o of obstacles) {
+    const sx = o.worldX-cameraX, sy = GROUND_Y+player.h-o.h;
+    if (rectsOverlap(pr, {x:sx+4, y:sy+4, w:o.w-8, h:o.h-4})) return true;
+  }
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const sx = e.worldX-cameraX;
+    if (rectsOverlap(pr, {x:sx+6, y:e.y+8, w:e.w-12, h:e.h*0.65})) return true;
+  }
+  return false;
+}
+
+
+// ================================================================
+// 14. SCORE & DIFFICULTY
+// ================================================================
+function updateScore() {
+  distanceTravelled += gameSpeed;
+  // Base score from distance, bonus from coins
+  score     = Math.floor(distanceTravelled / 10) + coinCount * COIN_CFG.scoreValue;
+  gameSpeed = Math.min(CONFIG.game.maxSpeed,
+    CONFIG.game.startSpeed + Math.floor(score / 300) * 0.5 + score / 2000
+  );
+}
+
+function updateHUD() {
+  document.getElementById('scoreDisplay').textContent = score;
+  document.getElementById('coinDisplay').textContent  = coinCount;
+  document.getElementById('bestDisplay').textContent  = bestScore;
+  document.getElementById('speedDisplay').textContent = gameSpeed.toFixed(1) + 'x';
+}
+
+
+// ================================================================
+// 15. AUDIO SYSTEM
+// ================================================================
+// All audio paths/volumes come from CONFIG (loaded from config.json).
+// To change a sound, edit config.json only — these functions never
+// hardcode any path or URL.
+//
+// playSound(name)  — one-shot SFX, instant replay, no queue delay
+// playMusic(name)  — looping track, no-op if already playing
+// stopMusic(name)  — smooth volume fade then cleanup
+// ----------------------------------------------------------------
+
+const _music = {}; // Active music Audio nodes keyed by name
+
+function playSound(name) {
+  const e = CONFIG.audio.sfx[name];
+  if (!e || !e.enabled || !e.src) return;
+  try {
+    const a   = new Audio(e.src);
+    a.volume  = e.volume ?? 1;
+    a.onended = () => { a.src = ''; };
+    a.play().catch(() => {});
+  } catch (_) {}
+}
+
+function playMusic(name) {
+  const e = CONFIG.audio.music[name];
+  if (!e || !e.enabled || !e.src || _music[name]) return;
+  try {
+    const a = new Audio(e.src);
+    a.volume = e.volume ?? 0.5;
+    a.loop   = e.loop   ?? true;
+    a.play().catch(() => {});
+    _music[name] = a;
+  } catch (_) {}
+}
+
+function stopMusic(name) {
+  const a = _music[name];
+  if (!a) return;
+  const fade = setInterval(() => {
+    if (a.volume > 0.05) { a.volume = Math.max(0, a.volume - 0.05); }
+    else { a.pause(); a.src = ''; delete _music[name]; clearInterval(fade); }
+  }, 40);
+}
+
+
+// ================================================================
+// 16. GAME LOOP
+// ================================================================
+function gameLoop() {
+  if (state !== 'playing') return;
+  frameCount++;
+
+  // Update
+  updateCamera();
+  player.update();
+  updateObstacles();
+  updateEnemies();
+  updateCoins();
+  checkCoinCollect();
+  updateParticles();
+  updateScore();
+
+  if (checkCollisions()) { triggerDeath(); return; }
+
+  // Draw
+  ctx.clearRect(0, 0, BASE_W, BASE_H);
+  drawBackground();
+  drawGround();
+  drawCoins();       // Coins behind obstacles so they feel "embedded" in the path
+  drawObstacles();
+  drawEnemies();
+  player.draw();
+  drawParticles();
+
+  // Speed streaks at high velocity
+  if (gameSpeed > 7) {
+    ctx.save();
+    ctx.globalAlpha = ((gameSpeed-7)/10)*0.3;
+    ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 1;
+    for (let i = 0; i < 8; i++) {
+      const lx = Math.random()*BASE_W, ly = Math.random()*GROUND_Y;
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx-30-Math.random()*20, ly); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  updateHUD();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+
+// ================================================================
+// 17. DEATH & RESTART
+// ================================================================
+function triggerDeath() {
+  state = 'dead';
+  playSound('hit');
+  stopMusic('bg');
+  spawnParticles(PLAYER_X + player.w/2, player.y + player.h/2, 30, 'death');
+  if (score > bestScore) bestScore = score;
+
+  let frames = 0;
+  function deathAnim() {
+    updateParticles();
+    ctx.clearRect(0, 0, BASE_W, BASE_H);
+    drawBackground(); drawGround(); drawCoins(); drawObstacles(); drawEnemies(); drawParticles();
+    if (++frames < 60) requestAnimationFrame(deathAnim);
+    else showGameOver();
+  }
+  deathAnim();
+}
+
+function startGame() {
+  player.reset();
+  obstacles.length = enemies.length = coins.length = particles.length = 0;
+  score = coinCount = distanceTravelled = frameCount = 0;
+  gameSpeed      = CONFIG.game.startSpeed;
+  cameraX        = 0;
+  nextObstacleIn = 80;
+  nextEnemyIn    = ENEMY_SPAWN_INTERVAL;
+  nextCoinIn     = Math.floor(COIN_CFG.spawnIntervalMin + Math.random()*60);
+  state          = 'playing';
+
+  hideAllOverlays();
+  if (animId) cancelAnimationFrame(animId);
+  playMusic('bg');
+  gameLoop();
+}
+
+
+// ================================================================
+// 18. INPUT HANDLING
+// ================================================================
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+    e.preventDefault();
+    if      (state === 'playing') player.jump();
+    else if (state !== 'dead')    {} // handled by buttons
+    else                          startGame();
+  }
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (state === 'playing') player.jump();
+});
+
+
+// ================================================================
+// 19. UI MANAGEMENT
+// ================================================================
+function hideAllOverlays() {
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+}
+
+function showGameOver() {
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalCoins').textContent = coinCount;
+  document.getElementById('finalBest').textContent  = bestScore;
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+
+document.getElementById('startBtn').addEventListener('click',   startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+
+// ================================================================
+// 20. BOOT — wait for config.json, then draw the static title screen
+// ================================================================
+configReady.then(() => {
+  applyConfig();
+  player.y = GROUND_Y; // Initialise player Y now that GROUND_Y is known
+
+  // Static title-screen preview
+  ctx.clearRect(0, 0, BASE_W, BASE_H);
+  cameraX = 0;
+  drawBackground();
+  drawGround();
+
+  // A few decorative preview coins for the title screen
+  [
+    { worldX:260, baseY:GROUND_Y-100, phase:0.0, size:13, hue:290, collected:false, alpha:1 },
+    { worldX:420, baseY:GROUND_Y-145, phase:1.3, size:12, hue:320, collected:false, alpha:1 },
+    { worldX:590, baseY:GROUND_Y-110, phase:2.5, size:14, hue:270, collected:false, alpha:1 },
+    { worldX:760, baseY:GROUND_Y-130, phase:0.9, size:11, hue:300, collected:false, alpha:1 },
+  ].forEach(c => drawCoin(c));
+
+  player.draw();
+});
+</script>
+</body>
+</html>
