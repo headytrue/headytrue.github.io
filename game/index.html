@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Jungle Run — Ancient Ruins Runner</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#020d04;
+    display:flex; justify-content:center; align-items:center;
+    width:100vw; height:100vh;
+    overflow:hidden;
+    font-family:'Georgia',serif;
+    touch-action:none;
+  }
+  #gameWrapper { position:relative; display:flex; justify-content:center; align-items:center; }
+  canvas { display:block; }
+
+  .screen {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .screen.hidden { display:none; }
+
+  /* ── Start Screen ── */
+  #startScreen {
+    background:linear-gradient(180deg,rgba(2,13,4,0.88) 0%,rgba(5,30,10,0.94) 100%);
+    pointer-events:all;
+  }
+  .game-title {
+    font-size:clamp(2.4rem,9vw,4.5rem);
+    letter-spacing:0.1em;
+    color:#a0e850;
+    text-shadow:0 0 30px #60c02080, 0 0 60px #40a01040;
+    font-variant:small-caps;
+    margin-bottom:0.1em;
+  }
+  .game-subtitle {
+    font-size:clamp(0.75rem,2.8vw,1rem);
+    color:#608050;
+    letter-spacing:0.35em;
+    text-transform:uppercase;
+    margin-bottom:2em;
+  }
+  .divider {
+    width:60%; max-width:260px; height:1px;
+    background:linear-gradient(90deg,transparent,#60c020,transparent);
+    margin-bottom:1.8em;
+  }
+  .instructions {
+    color:#90c870;
+    font-size:clamp(0.75rem,2.8vw,1rem);
+    text-align:center;
+    line-height:2;
+    margin-bottom:2.2em;
+    opacity:0.9;
+  }
+  .instructions span { color:#c8f060; font-weight:bold; }
+  .btn {
+    background:linear-gradient(135deg,#206020,#104010);
+    border:1.5px solid #60c030;
+    color:#c8f060;
+    font-family:'Georgia',serif;
+    font-size:clamp(1rem,3.5vw,1.3rem);
+    font-variant:small-caps;
+    letter-spacing:0.2em;
+    padding:0.7em 2.4em;
+    cursor:pointer;
+    pointer-events:all;
+    border-radius:4px;
+    box-shadow:0 0 20px #40802040;
+    transition:box-shadow 0.2s, transform 0.1s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .btn:active { transform:scale(0.96); }
+
+  /* ── HUD ── */
+  #hud {
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between;
+    padding:clamp(8px,2vw,14px) clamp(10px,3vw,18px);
+    pointer-events:none;
+  }
+  #hud.hidden { display:none; }
+  .hud-block { display:flex; flex-direction:column; }
+  .hud-label { font-size:clamp(0.55rem,1.8vw,0.7rem); color:#608050; letter-spacing:0.25em; text-transform:uppercase; }
+  .hud-value { font-size:clamp(1.1rem,4vw,1.6rem); color:#a0e850; font-variant-numeric:tabular-nums; text-shadow:0 0 12px #60c02060; }
+  #heartsDisplay { display:flex; gap:4px; align-items:center; margin-top:3px; }
+  .heart { font-size:clamp(1rem,3.5vw,1.3rem); transition:opacity 0.3s; }
+  .heart.empty { opacity:0.2; }
+
+  /* ── Game Over ── */
+  #gameOverScreen {
+    background:linear-gradient(180deg,rgba(2,13,4,0.92) 0%,rgba(20,5,5,0.96) 100%);
+    pointer-events:all; gap:0;
+  }
+  .go-title { font-size:clamp(2rem,8vw,3.8rem); color:#e05030; font-variant:small-caps; letter-spacing:0.12em; text-shadow:0 0 30px #e0503080; margin-bottom:0.1em; }
+  .divider-go { width:50%; max-width:200px; height:1px; background:linear-gradient(90deg,transparent,#e05030,transparent); margin:0.8em 0 1.4em; }
+  .go-score-label { font-size:clamp(0.7rem,2.5vw,0.9rem); color:#608050; letter-spacing:0.3em; text-transform:uppercase; margin-top:0.5em; }
+  .go-score-val { font-size:clamp(2rem,7vw,3rem); color:#a0e850; text-shadow:0 0 20px #60c02060; margin-bottom:0.2em; }
+  .go-best-label { font-size:clamp(0.65rem,2.2vw,0.8rem); color:#507040; letter-spacing:0.25em; text-transform:uppercase; }
+  .go-best-val { font-size:clamp(1rem,3.5vw,1.3rem); color:#80c040; margin-bottom:1.8em; }
+</style>
+</head>
+<body>
+<div id="gameWrapper">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-block">
+      <span class="hud-label">Distance</span>
+      <span class="hud-value" id="scoreDisplay">0</span>
+    </div>
+    <div class="hud-block" style="align-items:flex-end">
+      <span class="hud-label">Lives</span>
+      <div id="heartsDisplay">
+        <span class="heart" id="h1">♥</span>
+        <span class="heart" id="h2">♥</span>
+        <span class="heart" id="h3">♥</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Screen -->
+  <div id="startScreen" class="screen">
+    <div class="game-title">Jungle Run</div>
+    <div class="game-subtitle">Ancient Ruins Runner</div>
+    <div class="divider"></div>
+    <div class="instructions">
+      <span>Tap left</span> to jump · <span>Double-tap</span> to double jump<br>
+      Collect <span>⬤ energy orbs</span> on platforms<br>
+      <span>Tap SLASH</span> button to unleash your blade
+    </div>
+    <button class="btn" id="startBtn">Enter the Jungle</button>
+  </div>
+
+  <!-- Game Over -->
+  <div id="gameOverScreen" class="screen hidden">
+    <div class="go-title">Devoured</div>
+    <div class="divider-go"></div>
+    <div class="go-score-label">Distance Fled</div>
+    <div class="go-score-val" id="goScore">0</div>
+    <div class="go-best-label">Best Escape</div>
+    <div class="go-best-val" id="goBest">0</div>
+    <button class="btn" id="restartBtn">Try Again</button>
+  </div>
+</div>
+
+<script>
+// =============================================================================
+//  JUNGLE RUN — Ancient Ruins Endless Runner
+//  Vanilla HTML5 Canvas · No libraries · Mobile-first
+// =============================================================================
+
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+const startScreen    = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const hud            = document.getElementById('hud');
+const scoreDisplay   = document.getElementById('scoreDisplay');
+const goScore        = document.getElementById('goScore');
+const goBest         = document.getElementById('goBest');
+const startBtn       = document.getElementById('startBtn');
+const restartBtn     = document.getElementById('restartBtn');
+const heartEls       = [
+  document.getElementById('h1'),
+  document.getElementById('h2'),
+  document.getElementById('h3'),
+];
+
+// =============================================================================
+//  CANVAS SIZING
+// =============================================================================
+let W, H, GROUND;
+
+function resizeCanvas() {
+  W = Math.min(window.innerWidth,  480);
+  H = Math.min(window.innerHeight, 860);
+  canvas.width  = W;
+  canvas.height = H;
+  const wrapper = document.getElementById('gameWrapper');
+  wrapper.style.width  = W + 'px';
+  wrapper.style.height = H + 'px';
+  GROUND = Math.floor(H * 0.73);
+}
+resizeCanvas();
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  initBackground();
+  if (state === 'playing') initLevel();
+});
+
+// =============================================================================
+//  GAME STATE
+// =============================================================================
+let state     = 'start';
+let score     = 0;
+let bestScore = 0;
+let lives     = 3;
+let invincible = 0;   // frames of post-hit immunity
+let frame     = 0;
+let speed     = 3.5;
+let rafId     = null;
+
+// ── Energy & Sword Slash ──
+let energy      = 0;       // 0–5 orbs collected
+const MAX_ENERGY = 5;
+let slashActive  = false;  // is slash animation playing?
+let slashTimer   = 0;      // counts down during slash (30 frames)
+let slashCooldown = 0;     // cooldown between slashes (60 frames)
+const SLASH_DURATION = 22;
+const SLASH_RANGE    = 110; // px in front of player
+
+// =============================================================================
+//  PHYSICS CONSTANTS
+// =============================================================================
+const GRAVITY   = 0.55;
+const JUMP_VEL  = -13.5;
+const DJUMP_VEL = -11.5;
+
+// =============================================================================
+//  PLAYER
+// =============================================================================
+const player = {
+  x: 0, y: 0,
+  w: 28, h: 44,
+  vy: 0,
+  jumps: 0,          // 0=grounded, 1=jumped, 2=double jumped
+  onGround: false,
+  onPlatform: false,
+  animFrame: 0,
+  animTimer: 0,
+  bladeAngle: 0,
+  trail: [],
+};
+
+function initPlayer() {
+  player.x  = Math.floor(W * 0.22);
+  player.y  = GROUND - player.h;
+  player.vy = 0;
+  player.jumps = 0;
+  player.onGround  = true;
+  player.onPlatform = false;
+  player.trail = [];
+  player.bladeAngle = 0;
+}
+
+// =============================================================================
+//  PLATFORMS  (mossy stone slabs — wider for orb collection)
+// =============================================================================
+let platforms    = [];
+let platformTimer = 0;
+
+function spawnPlatform() {
+  const pw = 100 + Math.random() * 110;   // wider platforms
+  const ph = 16;
+  const minY = GROUND - player.h * 3.8;
+  const maxY = GROUND - player.h * 1.7;
+  const py   = minY + Math.random() * (maxY - minY);
+  // Spawn 1–2 energy orbs on top of this platform
+  const orbCount = Math.random() < 0.5 ? 1 : 2;
+  const newOrbs = [];
+  for (let o = 0; o < orbCount; o++) {
+    newOrbs.push({
+      x:         W + 20 + pw * (0.25 + o * 0.42),
+      y:         py - 22,
+      r:         9,
+      collected: false,
+      phase:     Math.random() * Math.PI * 2,
+    });
+  }
+  orbs.push(...newOrbs);
+  platforms.push({
+    x:    W + 20,
+    y:    py,
+    w:    pw,
+    h:    ph,
+    mossDensity: Math.random(),
+    vineLen: 20 + Math.random() * 60,
+  });
+}
+
+// =============================================================================
+//  ENEMIES
+// =============================================================================
+let enemies    = [];
+let enemyTimer = 0;
+
+function spawnEnemy() {
+  // 60% ground (jungle panther), 40% flying (giant beetle)
+  const type = Math.random() < 0.6 ? 'panther' : 'beetle';
+  const ew   = type === 'panther' ? 36 : 30;
+  const eh   = type === 'panther' ? 30 : 24;
+  const ey   = type === 'panther'
+    ? GROUND - eh
+    : GROUND - eh - 50 - Math.random() * 90;
+  enemies.push({
+    x: W + 30, y: ey,
+    w: ew, h: eh,
+    type,
+    phase: Math.random() * Math.PI * 2,
+  });
+}
+
+// =============================================================================
+//  ENERGY ORBS — collectibles that sit on platforms
+// =============================================================================
+let orbs = [];   // orbs are spawned by spawnPlatform() and stored here
+
+// =============================================================================
+//  PARTICLES
+// =============================================================================
+let particles = [];
+
+function spawnParticles(x, y, color, count, spd) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = spd * (0.4 + Math.random() * 0.8);
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s - 1.5,
+      life: 1,
+      decay: 0.025 + Math.random() * 0.04,
+      r: 2 + Math.random() * 3,
+      color,
+    });
+  }
+}
+
+// =============================================================================
+//  BACKGROUND — jungle parallax layers
+// =============================================================================
+let bgLayers = [];  // distant foliage silhouettes
+let stars    = [];  // fireflies / jungle specks
+let vines    = [];  // hanging foreground vines
+let fogOffset = 0;
+
+function initBackground() {
+  // "Fireflies" in the jungle canopy
+  stars = [];
+  for (let i = 0; i < 60; i++) {
+    stars.push({
+      x:       Math.random() * W,
+      y:       Math.random() * GROUND * 0.8,
+      r:       0.6 + Math.random() * 1.4,
+      speed:   0.08 + Math.random() * 0.25,
+      twinkle: Math.random() * Math.PI * 2,
+      hue:     90 + Math.random() * 80,   // yellow-green fireflies
+    });
+  }
+
+  // Silhouette tree layers (3 depths)
+  bgLayers = [
+    buildTreeLayer(4,  0.30, 0.55, '#021408', 0.07),
+    buildTreeLayer(6,  0.42, 0.42, '#041e0a', 0.17),
+    buildTreeLayer(8,  0.54, 0.32, '#072e10', 0.34),
+  ];
+
+  // Hanging vines from top
+  vines = [];
+  for (let i = 0; i < 12; i++) {
+    vines.push({
+      x:      Math.random() * W,
+      len:    40 + Math.random() * 120,
+      speed:  0.4 + Math.random() * 0.8,
+      phase:  Math.random() * Math.PI * 2,
+      thick:  1 + Math.random() * 1.5,
+    });
+  }
+}
+
+function buildTreeLayer(count, baseYFrac, heightFrac, color, scrollFactor) {
+  const peaks = [];
+  const segW  = W / count;
+  for (let i = 0; i <= count + 2; i++) {
+    peaks.push({
+      x: i * segW,
+      y: GROUND * (baseYFrac + (Math.random() - 0.5) * heightFrac),
+    });
+  }
+  return { peaks, color, scrollFactor, offsetX: 0 };
+}
+
+// =============================================================================
+//  DECORATIVE RUINS (columns / blocks / arches / idols scrolling in bg)
+// =============================================================================
+let ruinDecor = [];
+let ruinTimer = 0;
+
+function spawnRuinDecor() {
+  const roll = Math.random();
+  let type;
+  if      (roll < 0.28) type = 'column';
+  else if (roll < 0.50) type = 'block';
+  else if (roll < 0.70) type = 'arch';
+  else if (roll < 0.85) type = 'wall';
+  else                  type = 'idol';
+
+  ruinDecor.push({
+    x:     W + 10,
+    type,
+    h:     35 + Math.random() * 80,
+    w:     type === 'arch' ? 55 + Math.random() * 25
+         : type === 'wall' ? 40 + Math.random() * 60
+         : 14 + Math.random() * 22,
+    y:     GROUND,
+    mossy: Math.random() > 0.35,
+    age:   0,
+  });
+}
+
+// =============================================================================
+//  LEVEL RESET
+// =============================================================================
+function initLevel() {
+  score       = 0;
+  lives       = 3;
+  invincible  = 0;
+  speed       = 3.5;
+  frame       = 0;
+  platforms   = [];
+  enemies     = [];
+  particles   = [];
+  ruinDecor   = [];
+  orbs        = [];
+  energy      = 0;
+  slashActive  = false;
+  slashTimer   = 0;
+  slashCooldown = 0;
+  platformTimer = 0;
+  enemyTimer    = 0;
+  ruinTimer     = 0;
+  fogOffset     = 0;
+  initPlayer();
+  initBackground();
+  updateHearts();
+}
+
+// =============================================================================
+//  INPUT
+// =============================================================================
+function doJump() {
+  if (player.jumps === 0) {
+    player.vy  = JUMP_VEL;
+    player.jumps = 1;
+    player.onGround   = false;
+    player.onPlatform = false;
+    spawnParticles(player.x + player.w / 2, player.y + player.h, '#60c030', 8, 3.5);
+  } else if (player.jumps === 1) {
+    player.vy  = DJUMP_VEL;
+    player.jumps = 2;
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#c0f040', 14, 4.5);
+  }
+}
+
+function doSlash() {
+  if (energy <= 0 || slashActive || slashCooldown > 0) return;
+  energy--;
+  slashActive  = true;
+  slashTimer   = SLASH_DURATION;
+  slashCooldown = 60;
+  // Kill all enemies within SLASH_RANGE in front of player
+  const px = player.x + player.w;
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (e.x < px + SLASH_RANGE && e.x + e.w > player.x) {
+      spawnParticles(e.x + e.w / 2, e.y + e.h / 2, '#ffe040', 18, 5);
+      enemies.splice(i, 1);
+      score += 50; // bonus score per kill
+    }
+  }
+  // Green slash burst from sword tip
+  spawnParticles(player.x + player.w + 20, player.y + player.h * 0.3, '#80ff40', 20, 7);
+}
+
+// ── Touch: left side = jump, right side = slash ──
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (state !== 'playing') return;
+  for (const touch of e.changedTouches) {
+    const rect = canvas.getBoundingClientRect();
+    const tx   = touch.clientX - rect.left;
+    const ty   = touch.clientY - rect.top;
+    // Kill button zone: bottom-right quadrant circle area
+    const btnCx = W - 52, btnCy = H - 52, btnR = 40;
+    const dist  = Math.hypot(tx - btnCx, ty - btnCy);
+    if (dist < btnR) {
+      doSlash();
+    } else {
+      doJump();
+    }
+  }
+}, { passive: false });
+
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+document.addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.code === 'ArrowUp') && state === 'playing') doJump();
+  if (e.code === 'KeyZ' && state === 'playing') doSlash();
+});
+
+startBtn.addEventListener('click',   startGame);
+restartBtn.addEventListener('click', startGame);
+[startBtn, restartBtn].forEach(b => b.addEventListener('touchstart', e => e.stopPropagation()));
+
+// =============================================================================
+//  GAME FLOW
+// =============================================================================
+function startGame() {
+  startScreen.classList.add('hidden');
+  gameOverScreen.classList.add('hidden');
+  hud.classList.remove('hidden');
+  initLevel();
+  state = 'playing';
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(gameLoop);
+}
+
+function triggerGameOver() {
+  state = 'dead';
+  if (score > bestScore) bestScore = score;
+  goScore.textContent = score;
+  goBest.textContent  = bestScore;
+  hud.classList.add('hidden');
+  gameOverScreen.classList.remove('hidden');
+  spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#e05030', 30, 6);
+}
+
+function updateHearts() {
+  heartEls.forEach((el, i) => el.classList.toggle('empty', i >= lives));
+}
+
+// =============================================================================
+//  COLLISION — axis-aligned bounding box
+// =============================================================================
+function aabb(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// Slightly shrunk hitbox for fairness on mobile
+function playerBox() {
+  const s = 6;
+  return { x: player.x + s, y: player.y + s, w: player.w - s * 2, h: player.h - s };
+}
+
+// =============================================================================
+//  UPDATE
+// =============================================================================
+function update() {
+  frame++;
+
+  // Speed ramp (max +4.5 after ~20 seconds)
+  speed = 3.5 + Math.min(frame / 1200, 1) * 4.5;
+
+  // Distance score
+  score = Math.floor(frame * speed / 20);
+  scoreDisplay.textContent = score;
+
+  // Invincibility countdown
+  if (invincible > 0) invincible--;
+
+  // ── Player physics ──
+  player.vy += GRAVITY;
+  player.y  += player.vy;
+
+  // Ground
+  if (player.y + player.h >= GROUND) {
+    player.y      = GROUND - player.h;
+    player.vy     = 0;
+    player.jumps  = 0;
+    player.onGround  = true;
+    player.onPlatform = false;
+  }
+
+  // Run animation
+  player.animTimer++;
+  if (player.animTimer >= 7) { player.animFrame = (player.animFrame + 1) % 4; player.animTimer = 0; }
+  player.bladeAngle = Math.sin(frame * 0.12) * 0.28;
+
+  // Motion trail
+  player.trail.unshift({ x: player.x + player.w / 2, y: player.y + player.h / 2 });
+  if (player.trail.length > 10) player.trail.pop();
+
+  // ── Platforms ──
+  platformTimer++;
+  const platInterval = Math.max(75, 155 - Math.floor(frame / 300) * 8);
+  if (platformTimer > platInterval) {
+    if (Math.random() < 0.72) spawnPlatform();
+    platformTimer = 0;
+  }
+
+  for (let i = platforms.length - 1; i >= 0; i--) {
+    const p = platforms[i];
+    p.x -= speed;
+    if (p.x + p.w < -20) { platforms.splice(i, 1); continue; }
+
+    // Land on top of platform (only when falling)
+    if (player.vy >= 0 &&
+        player.x + player.w > p.x + 4 &&
+        player.x < p.x + p.w - 4 &&
+        player.y + player.h >= p.y &&
+        player.y + player.h <= p.y + p.h + 14) {
+      player.y      = p.y - player.h;
+      player.vy     = 0;
+      player.jumps  = 0;
+      player.onGround   = false;
+      player.onPlatform = true;
+    }
+  }
+
+  // ── Slash cooldown ──
+  if (slashCooldown > 0) slashCooldown--;
+  if (slashTimer > 0) { slashTimer--; if (slashTimer === 0) slashActive = false; }
+
+  // ── Energy Orbs ──
+  const pbOrb = playerBox();
+  for (let i = orbs.length - 1; i >= 0; i--) {
+    const o = orbs[i];
+    o.x     -= speed;
+    o.phase += 0.07;
+    if (o.x + o.r < -10) { orbs.splice(i, 1); continue; }
+    if (!o.collected && aabb(pbOrb, { x: o.x - o.r, y: o.y - o.r, w: o.r * 2, h: o.r * 2 })) {
+      o.collected = true;
+      energy = Math.min(energy + 1, MAX_ENERGY);
+      spawnParticles(o.x, o.y, '#60ffaa', 12, 4);
+      orbs.splice(i, 1);
+    }
+  }
+
+  // ── Enemies ──
+  enemyTimer++;
+  const enemyInterval = Math.max(50, 125 - Math.floor(frame / 400) * 10);
+  if (enemyTimer > enemyInterval) {
+    spawnEnemy();
+    enemyTimer = 0;
+  }
+
+  const pb = playerBox();
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.x -= speed * (e.type === 'beetle' ? 1.2 : 1.0);
+    e.phase += 0.07;
+    if (e.type === 'beetle') e.y += Math.sin(e.phase) * 1.3;
+    if (e.x + e.w < -20) { enemies.splice(i, 1); continue; }
+
+    if (invincible === 0 && aabb(pb, e)) {
+      lives--;
+      invincible = 90;
+      updateHearts();
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff6030', 20, 5);
+      enemies.splice(i, 1);
+      if (lives <= 0) { triggerGameOver(); return; }
+    }
+  }
+
+  // ── Ruin decor ──
+  ruinTimer++;
+  if (ruinTimer > 70) {
+    if (Math.random() < 0.6) spawnRuinDecor();
+    ruinTimer = 0;
+  }
+  for (let i = ruinDecor.length - 1; i >= 0; i--) {
+    ruinDecor[i].x -= speed * 0.55;
+    if (ruinDecor[i].x + ruinDecor[i].w < -20) ruinDecor.splice(i, 1);
+  }
+
+  // ── Particles ──
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x   += p.vx;
+    p.y   += p.vy;
+    p.vy  += 0.12;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // ── Parallax scroll ──
+  for (const layer of bgLayers) layer.offsetX -= speed * layer.scrollFactor;
+  for (const s of stars) {
+    s.x -= s.speed;
+    s.twinkle += 0.055;
+    if (s.x < -2) s.x = W + 2;
+  }
+  for (const v of vines) {
+    v.x -= speed * 1.1;
+    v.phase += 0.02;
+    if (v.x < -10) { v.x = W + Math.random() * 60; v.len = 40 + Math.random() * 120; }
+  }
+  fogOffset = (fogOffset + speed * 0.3) % W;
+}
+
+// =============================================================================
+//  DRAW
+// =============================================================================
+function draw() {
+  // ── Sky / canopy gradient ──
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, GROUND);
+  skyGrad.addColorStop(0,   '#010802');
+  skyGrad.addColorStop(0.45,'#041a08');
+  skyGrad.addColorStop(1,   '#0a2e10');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Fireflies ──
+  for (const s of stars) {
+    const alpha = 0.4 + 0.6 * Math.abs(Math.sin(s.twinkle));
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${s.hue},90%,70%,${alpha})`;
+    ctx.fill();
+    // tiny glow
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r * 3, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${s.hue},90%,70%,${alpha * 0.15})`;
+    ctx.fill();
+  }
+
+  // ── Distant sun shaft through canopy ──
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  for (let i = 0; i < 5; i++) {
+    const sx = W * (0.3 + i * 0.1) + Math.sin(frame * 0.008 + i) * 8;
+    ctx.beginPath();
+    ctx.moveTo(sx - 15, 0);
+    ctx.lineTo(sx + 15, 0);
+    ctx.lineTo(sx + 40, GROUND);
+    ctx.lineTo(sx - 40, GROUND);
+    ctx.closePath();
+    ctx.fillStyle = '#c0f060';
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ── Parallax tree silhouettes ──
+  for (const layer of bgLayers) drawTreeLayer(layer);
+
+  // ── Background ruin decor ──
+  for (const r of ruinDecor) drawRuinDecor(r);
+
+  // ── Ground ──
+  drawGround();
+
+  // ── Platforms ──
+  for (const p of platforms) drawPlatform(p);
+
+  // ── Energy Orbs (on/near platforms) ──
+  for (const o of orbs) drawOrb(o);
+
+  // ── Hanging vines (foreground) ──
+  for (const v of vines) drawVine(v);
+
+  // ── Player trail ──
+  for (let i = 0; i < player.trail.length; i++) {
+    const t     = player.trail[i];
+    const frac  = 1 - i / player.trail.length;
+    const alpha = frac * 0.22;
+    const radius = player.w * 0.32 * frac;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(80,200,40,${alpha})`;
+    ctx.fill();
+  }
+
+  // ── Player (flicker when invincible) ──
+  if (invincible === 0 || Math.floor(frame / 4) % 2 === 0) drawPlayer();
+
+  // ── Enemies ──
+  for (const e of enemies) drawEnemy(e);
+
+  // ── Particles ──
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur  = 6;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Sword slash arc effect ──
+  if (slashActive) drawSlashArc();
+
+  // ── Ground mist ──
+  const mistGrad = ctx.createLinearGradient(0, GROUND - 15, 0, GROUND + 55);
+  mistGrad.addColorStop(0, 'rgba(20,80,30,0)');
+  mistGrad.addColorStop(1, 'rgba(20,80,30,0.3)');
+  ctx.fillStyle = mistGrad;
+  ctx.fillRect(0, GROUND - 15, W, 70);
+
+  // Scrolling mist wisps
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = '#40a050';
+  for (let i = 0; i < 4; i++) {
+    const mx = ((fogOffset + i * W / 4) % (W + 100)) - 50;
+    ctx.beginPath();
+    ctx.ellipse(mx, GROUND + 10, 80, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  // ── Kill button & Energy bar (HUD overlay on canvas) ──
+  if (state === 'playing') {
+    drawKillButton();
+    drawEnergyBar();
+  }
+}
+
+// ── Energy Orb ──
+function drawOrb(o) {
+  const pulse  = 0.5 + 0.5 * Math.sin(o.phase + frame * 0.08);
+  const floatY = o.y + Math.sin(o.phase + frame * 0.06) * 4;
+  ctx.save();
+  // Outer glow halo
+  ctx.beginPath();
+  ctx.arc(o.x, floatY, o.r + 5 + pulse * 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(60,255,160,0.10)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(o.x, floatY, o.r + 2 + pulse * 2, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(60,255,160,0.20)';
+  ctx.fill();
+  // Core gradient sphere
+  const g = ctx.createRadialGradient(o.x - 2, floatY - 2, 1, o.x, floatY, o.r);
+  g.addColorStop(0,   '#ffffff');
+  g.addColorStop(0.3, '#a0ffcc');
+  g.addColorStop(0.7, '#20e890');
+  g.addColorStop(1,   '#00a050');
+  ctx.shadowColor = '#40ffaa'; ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.arc(o.x, floatY, o.r, 0, Math.PI * 2);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  // Inner sparkle
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.arc(o.x - 2.5, floatY - 2.5, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  // Rotating star flares
+  ctx.save();
+  ctx.translate(o.x, floatY);
+  ctx.rotate(frame * 0.04 + o.phase);
+  ctx.strokeStyle = 'rgba(150,255,200,0.5)'; ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * (o.r + 1), Math.sin(a) * (o.r + 1));
+    ctx.lineTo(Math.cos(a) * (o.r + 6 + pulse * 3), Math.sin(a) * (o.r + 6 + pulse * 3));
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// ── Sword Slash Arc ──
+function drawSlashArc() {
+  const prog  = 1 - slashTimer / SLASH_DURATION;
+  const alpha = slashTimer / SLASH_DURATION;
+  const px    = player.x + player.w + 4;
+  const py    = player.y + player.h * 0.25;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const startAngle = -Math.PI * 0.7;
+  const endAngle   = startAngle + Math.PI * 0.9 * prog;
+  // Outer glow
+  ctx.beginPath();
+  ctx.arc(px, py, SLASH_RANGE * 0.85, startAngle, endAngle);
+  ctx.strokeStyle = 'rgba(180,255,100,0.4)'; ctx.lineWidth = 18; ctx.lineCap = 'round';
+  ctx.stroke();
+  // Bright edge
+  ctx.beginPath();
+  ctx.arc(px, py, SLASH_RANGE * 0.85, startAngle, endAngle);
+  ctx.strokeStyle = '#c0ff40'; ctx.lineWidth = 4;
+  ctx.shadowColor = '#80ff20'; ctx.shadowBlur = 16;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // Tip spark
+  if (prog > 0.05) {
+    const tipX = px + Math.cos(endAngle) * SLASH_RANGE * 0.85;
+    const tipY = py + Math.sin(endAngle) * SLASH_RANGE * 0.85;
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 6 + alpha * 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#c0ff40'; ctx.shadowBlur = 20;
+    ctx.fill(); ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+}
+
+// ── Kill Button (drawn on canvas, bottom-right corner) ──
+function drawKillButton() {
+  const bx  = W - 52, by = H - 52, br = 36;
+  const hasE = energy > 0, onCD = slashCooldown > 0;
+  ctx.save();
+  // Pulse ring when ready
+  if (hasE && !onCD) {
+    const p = 0.5 + 0.5 * Math.sin(frame * 0.12);
+    ctx.beginPath(); ctx.arc(bx, by, br + 6 + p * 4, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(150,255,80,${0.25 + p * 0.3})`; ctx.lineWidth = 2; ctx.stroke();
+  }
+  // Background
+  const bg = ctx.createRadialGradient(bx - 6, by - 6, 2, bx, by, br);
+  if (!hasE || onCD) {
+    bg.addColorStop(0, 'rgba(55,55,55,0.88)'); bg.addColorStop(1, 'rgba(20,20,20,0.88)');
+  } else {
+    bg.addColorStop(0, 'rgba(55,110,18,0.94)'); bg.addColorStop(1, 'rgba(12,55,4,0.94)');
+  }
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2);
+  ctx.fillStyle = bg; ctx.fill();
+  // Border
+  ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2);
+  ctx.strokeStyle = hasE && !onCD ? '#80e840' : '#383838'; ctx.lineWidth = 2;
+  ctx.shadowColor = hasE && !onCD ? '#80e840' : 'transparent';
+  ctx.shadowBlur  = hasE && !onCD ? 10 : 0; ctx.stroke(); ctx.shadowBlur = 0;
+  // Sword icon
+  ctx.save();
+  ctx.translate(bx, by); ctx.rotate(-Math.PI * 0.25);
+  const ic = hasE && !onCD ? '#d0ff80' : '#505050';
+  ctx.fillStyle = ic; ctx.shadowColor = hasE && !onCD ? '#80ff20' : 'transparent';
+  ctx.shadowBlur = hasE && !onCD ? 8 : 0;
+  ctx.beginPath(); ctx.moveTo(-2,-18); ctx.lineTo(2,-18); ctx.lineTo(3,8); ctx.lineTo(-3,8); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = hasE && !onCD ? '#c09030' : '#404040';
+  ctx.fillRect(-8, 6, 16, 4);
+  ctx.fillStyle = hasE && !onCD ? '#8a5020' : '#303030';
+  ctx.fillRect(-2.5, 10, 5, 10);
+  ctx.restore();
+  // Cooldown arc overlay
+  if (onCD) {
+    ctx.beginPath(); ctx.moveTo(bx, by);
+    ctx.arc(bx, by, br, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * (slashCooldown / 60));
+    ctx.closePath(); ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
+  }
+  // Label
+  ctx.fillStyle = hasE && !onCD ? '#a0e840' : '#404040';
+  ctx.font = `bold ${Math.floor(br * 0.28)}px Georgia`;
+  ctx.textAlign = 'center'; ctx.fillText('SLASH', bx, by + br + 13);
+  ctx.restore();
+}
+
+// ── Energy Bar (top-center) ──
+function drawEnergyBar() {
+  const barW   = Math.min(W * 0.38, 160);
+  const barX   = W / 2 - barW / 2;
+  const barY   = 12;
+  const gap    = 5;
+  const orbR   = (barW - gap * (MAX_ENERGY - 1)) / (MAX_ENERGY * 2);
+  ctx.save();
+  for (let i = 0; i < MAX_ENERGY; i++) {
+    const cx = barX + orbR + i * (orbR * 2 + gap);
+    const cy = barY + orbR;
+    const filled = i < energy;
+    ctx.beginPath(); ctx.arc(cx, cy, orbR + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = filled ? '#50b040' : '#1e2e1c'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (filled) {
+      const pulse = 0.5 + 0.5 * Math.sin(frame * 0.1 + i);
+      const g = ctx.createRadialGradient(cx - 1, cy - 1, 0, cx, cy, orbR);
+      g.addColorStop(0, '#c0fff0'); g.addColorStop(0.5,'#30e890'); g.addColorStop(1,'#10804a');
+      ctx.shadowColor = '#40ffaa'; ctx.shadowBlur = 8 + pulse * 4;
+      ctx.beginPath(); ctx.arc(cx, cy, orbR, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0;
+    } else {
+      ctx.beginPath(); ctx.arc(cx, cy, orbR, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(8,20,8,0.75)'; ctx.fill();
+    }
+  }
+  // "ENERGY" label below orbs
+  ctx.fillStyle = '#3a5030'; ctx.font = `${Math.max(9,Math.floor(orbR*0.85))}px Georgia`;
+  ctx.textAlign = 'center'; ctx.fillText('ENERGY', W / 2, barY + orbR * 2 + orbR + 3);
+  ctx.restore();
+}
+
+// ── Tree Layer silhouettes ──
+function drawTreeLayer(layer) {
+  const peaks  = layer.peaks;
+  const offset = ((layer.offsetX % W) + W) % W;
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.beginPath();
+    ctx.moveTo(pass * W - offset, GROUND);
+    for (const peak of peaks) ctx.lineTo(peak.x + pass * W - offset, peak.y);
+    ctx.lineTo(peaks[peaks.length - 1].x + pass * W - offset, GROUND);
+    ctx.closePath();
+    ctx.fillStyle = layer.color;
+    ctx.fill();
+  }
+}
+
+// ── Ground ──
+function drawGround() {
+  // Earth body
+  const groundGrad = ctx.createLinearGradient(0, GROUND, 0, H);
+  groundGrad.addColorStop(0,   '#1a4a10');
+  groundGrad.addColorStop(0.2, '#0e2e08');
+  groundGrad.addColorStop(1,   '#040e02');
+  ctx.fillStyle = groundGrad;
+  ctx.fillRect(0, GROUND, W, H - GROUND);
+
+  // Top mossy edge
+  const edgeGrad = ctx.createLinearGradient(0, GROUND - 3, 0, GROUND + 5);
+  edgeGrad.addColorStop(0, 'rgba(80,200,40,0)');
+  edgeGrad.addColorStop(0.5,'rgba(80,200,40,0.8)');
+  edgeGrad.addColorStop(1, 'rgba(80,200,40,0)');
+  ctx.fillStyle = edgeGrad;
+  ctx.fillRect(0, GROUND - 2, W, 5);
+
+  // Scrolling grass tufts
+  ctx.save();
+  ctx.strokeStyle = '#50c828';
+  ctx.lineWidth   = 1.5;
+  const spacing   = 24;
+  const offset    = (frame * speed * 0.5) % spacing;
+  for (let gx = -(spacing - offset % spacing); gx < W + spacing; gx += spacing) {
+    const jitter = Math.sin(gx * 0.3 + frame * 0.05) * 2;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.moveTo(gx,     GROUND); ctx.lineTo(gx + jitter,      GROUND - 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gx + 4, GROUND); ctx.lineTo(gx + 4 + jitter, GROUND - 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gx - 4, GROUND); ctx.lineTo(gx - 4 + jitter, GROUND - 5); ctx.stroke();
+  }
+  ctx.restore();
+
+  // Cracked stone tiles pattern
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = '#204010';
+  ctx.lineWidth   = 1;
+  const tileW = 40;
+  const tileOff = (frame * speed * 0.5) % tileW;
+  for (let tx = -(tileW - tileOff % tileW); tx < W + tileW; tx += tileW) {
+    ctx.beginPath();
+    ctx.moveTo(tx, GROUND + 2);
+    ctx.lineTo(tx, GROUND + 30);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── Mossy stone platform ──
+function drawPlatform(p) {
+  // Drop shadow
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(p.x + 5, p.y + p.h + 4, p.w - 5, 7);
+  ctx.restore();
+
+  // Stone body
+  const stonGrad = ctx.createLinearGradient(0, p.y, 0, p.y + p.h);
+  stonGrad.addColorStop(0, '#607060');
+  stonGrad.addColorStop(1, '#303830');
+  ctx.fillStyle = stonGrad;
+  roundRect(ctx, p.x, p.y, p.w, p.h, 4);
+  ctx.fill();
+
+  // Stone cracks
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = '#202820';
+  ctx.lineWidth = 1;
+  const mid = p.x + p.w * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(mid,     p.y + 2);
+  ctx.lineTo(mid + 4, p.y + p.h - 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Moss top (green overlay)
+  const mossGrad = ctx.createLinearGradient(0, p.y, 0, p.y + 5);
+  mossGrad.addColorStop(0, `rgba(60,180,30,${0.5 + p.mossDensity * 0.4})`);
+  mossGrad.addColorStop(1, 'rgba(60,180,30,0)');
+  ctx.fillStyle = mossGrad;
+  ctx.fillRect(p.x + 2, p.y, p.w - 4, 7);
+
+  // Vine hanging from platform
+  ctx.save();
+  ctx.strokeStyle = '#3a8020';
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.6;
+  const vineX = p.x + p.w * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(vineX, p.y + p.h);
+  for (let vy = 0; vy < p.vineLen; vy += 6) {
+    const swing = Math.sin(vy * 0.2 + frame * 0.04) * 3;
+    ctx.lineTo(vineX + swing, p.y + p.h + vy);
+    // leaf
+    if (vy % 12 === 0 && vy > 0) {
+      ctx.save();
+      ctx.fillStyle = '#50a030';
+      ctx.translate(vineX + swing, p.y + p.h + vy);
+      ctx.rotate(Math.sin(vy) * 0.5);
+      ctx.beginPath();
+      ctx.ellipse(5, 0, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Background ruin decor — column / block / arch / wall / idol ──
+function drawRuinDecor(r) {
+  ctx.save();
+  ctx.globalAlpha = 0.50;
+
+  const stoneGrad = () => {
+    const g = ctx.createLinearGradient(r.x, 0, r.x + r.w, 0);
+    g.addColorStop(0,   '#4a5445');
+    g.addColorStop(0.5, '#6a7465');
+    g.addColorStop(1,   '#3e4840');
+    return g;
+  };
+  const mossCover = (tx, ty, tw, th) => {
+    if (r.mossy) {
+      ctx.fillStyle = 'rgba(55,155,28,0.42)';
+      ctx.fillRect(tx, ty, tw, Math.min(6, th));
+    }
+  };
+
+  if (r.type === 'column') {
+    ctx.fillStyle = stoneGrad();
+    ctx.fillRect(r.x, r.y - r.h, r.w, r.h);
+    // Fluted detail lines
+    ctx.strokeStyle = 'rgba(30,40,28,0.4)'; ctx.lineWidth = 1;
+    for (let f = 1; f < 3; f++) {
+      ctx.beginPath();
+      ctx.moveTo(r.x + r.w * (f / 3), r.y - r.h);
+      ctx.lineTo(r.x + r.w * (f / 3), r.y);
+      ctx.stroke();
+    }
+    // Capital
+    ctx.fillStyle = '#5e6858';
+    ctx.fillRect(r.x - 5, r.y - r.h, r.w + 10, 9);
+    ctx.fillRect(r.x - 2, r.y - r.h + 9, r.w + 4, 4);
+    mossCover(r.x - 5, r.y - r.h, r.w + 10, 9);
+
+  } else if (r.type === 'block') {
+    // Crumbled stone block — irregular top edge
+    ctx.fillStyle = '#545e50';
+    ctx.beginPath();
+    ctx.moveTo(r.x, r.y);
+    ctx.lineTo(r.x, r.y - r.h);
+    ctx.lineTo(r.x + r.w * 0.3, r.y - r.h * 1.05);
+    ctx.lineTo(r.x + r.w * 0.6, r.y - r.h * 0.92);
+    ctx.lineTo(r.x + r.w,       r.y - r.h * 1.0);
+    ctx.lineTo(r.x + r.w, r.y);
+    ctx.closePath(); ctx.fill();
+    mossCover(r.x, r.y - r.h * 1.05, r.w, 8);
+    // Crack line
+    ctx.strokeStyle = 'rgba(20,30,18,0.5)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(r.x + r.w * 0.45, r.y - r.h);
+    ctx.lineTo(r.x + r.w * 0.38, r.y - r.h * 0.5);
+    ctx.lineTo(r.x + r.w * 0.42, r.y);
+    ctx.stroke();
+
+  } else if (r.type === 'arch') {
+    // Stone archway
+    const aw = r.w, ah = r.h;
+    const legW = aw * 0.2, legH = ah * 0.55;
+    const archInnerW = aw - legW * 2;
+    ctx.fillStyle = stoneGrad();
+    // Left leg
+    ctx.fillRect(r.x, r.y - ah, legW, ah);
+    // Right leg
+    ctx.fillRect(r.x + aw - legW, r.y - ah, legW, ah);
+    // Lintel / arch top
+    ctx.fillRect(r.x, r.y - ah, aw, legW * 1.2);
+    // Arch cutout (dark void inside)
+    ctx.fillStyle = 'rgba(5,12,5,0.7)';
+    ctx.beginPath();
+    ctx.arc(r.x + aw / 2, r.y - legH, archInnerW / 2, Math.PI, 0);
+    ctx.rect(r.x + legW, r.y - legH, archInnerW, legH);
+    ctx.fill();
+    // Keystone
+    ctx.fillStyle = '#707868';
+    ctx.beginPath();
+    ctx.moveTo(r.x + aw/2 - 6, r.y - ah);
+    ctx.lineTo(r.x + aw/2 + 6, r.y - ah);
+    ctx.lineTo(r.x + aw/2 + 4, r.y - ah + legW * 1.5);
+    ctx.lineTo(r.x + aw/2 - 4, r.y - ah + legW * 1.5);
+    ctx.closePath(); ctx.fill();
+    mossCover(r.x, r.y - ah, aw, 6);
+
+  } else if (r.type === 'wall') {
+    // Broken stone wall — brickwork pattern
+    ctx.fillStyle = '#4e5849';
+    ctx.fillRect(r.x, r.y - r.h, r.w, r.h);
+    // Brick lines
+    const brickH = 12, brickW = 22;
+    ctx.strokeStyle = 'rgba(25,35,22,0.45)'; ctx.lineWidth = 1;
+    for (let row = 0; row * brickH < r.h; row++) {
+      const ry = r.y - r.h + row * brickH;
+      ctx.beginPath(); ctx.moveTo(r.x, ry); ctx.lineTo(r.x + r.w, ry); ctx.stroke();
+      const offset = (row % 2) * (brickW / 2);
+      for (let col = -1; col * brickW < r.w + brickW; col++) {
+        const bx2 = r.x + col * brickW + offset;
+        ctx.beginPath(); ctx.moveTo(bx2, ry); ctx.lineTo(bx2, ry + brickH); ctx.stroke();
+      }
+    }
+    // Jagged broken top
+    ctx.fillStyle = '#141e12';
+    ctx.beginPath();
+    ctx.moveTo(r.x, r.y - r.h);
+    for (let tx2 = 0; tx2 <= r.w; tx2 += r.w / 5) {
+      ctx.lineTo(r.x + tx2, r.y - r.h - (tx2 % (r.w/3) < r.w/6 ? 0 : 8));
+    }
+    ctx.lineTo(r.x + r.w, r.y - r.h);
+    ctx.closePath(); ctx.fill();
+    mossCover(r.x, r.y - r.h, r.w, 7);
+
+  } else if (r.type === 'idol') {
+    // Ancient stone idol / totem face
+    const iw = r.w, ih = r.h, ix = r.x + iw / 2, iy = r.y - ih;
+    // Pedestal
+    ctx.fillStyle = '#505848';
+    ctx.fillRect(r.x - 2, r.y - ih * 0.3, iw + 4, ih * 0.3);
+    // Head block
+    ctx.fillStyle = stoneGrad();
+    roundRect(ctx, r.x, iy, iw, ih * 0.72, 3); ctx.fill();
+    // Eyes (dark carved holes)
+    ctx.fillStyle = 'rgba(5,10,5,0.85)';
+    ctx.beginPath(); ctx.ellipse(ix - iw * 0.22, iy + ih * 0.28, iw * 0.13, ih * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ix + iw * 0.22, iy + ih * 0.28, iw * 0.13, ih * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+    // Glowing eye pupils (moss glow)
+    ctx.fillStyle = 'rgba(60,200,40,0.6)';
+    ctx.shadowColor = '#40cc20'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(ix - iw * 0.22, iy + ih * 0.28, iw * 0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ix + iw * 0.22, iy + ih * 0.28, iw * 0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // Mouth slit
+    ctx.fillStyle = 'rgba(5,10,5,0.75)';
+    ctx.fillRect(ix - iw * 0.3, iy + ih * 0.5, iw * 0.6, ih * 0.07);
+    mossCover(r.x, iy, iw, 6);
+  }
+
+  ctx.restore();
+}
+
+// ── Hanging vines from top ──
+function drawVine(v) {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = '#2a6015';
+  ctx.lineWidth   = v.thick;
+  ctx.beginPath();
+  ctx.moveTo(v.x, 0);
+  for (let vy = 0; vy < v.len; vy += 5) {
+    const swing = Math.sin(vy * 0.15 + v.phase) * 4;
+    ctx.lineTo(v.x + swing, vy);
+    if (vy % 15 === 0) {
+      ctx.save();
+      ctx.fillStyle = '#408020';
+      ctx.translate(v.x + swing, vy);
+      ctx.rotate(Math.sin(vy + v.phase) * 0.6);
+      ctx.beginPath();
+      ctx.ellipse(6, 0, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// =============================================================================
+//  DRAW PLAYER — original art, flipped to face RIGHT via ctx.scale(-1,1)
+// =============================================================================
+function drawPlayer() {
+  const cx    = player.x + player.w / 2;
+  const cy    = player.y + player.h / 2;
+  const inAir = !player.onGround && !player.onPlatform;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(-1, 1); // flip horizontally → character now faces RIGHT
+
+  // ── Aura ──
+  ctx.beginPath();
+  ctx.arc(0, 0, player.w * 0.9, 0, Math.PI * 2);
+  ctx.fillStyle = invincible > 0 ? 'rgba(255,80,30,0.35)' : 'rgba(60,180,30,0.18)';
+  ctx.fill();
+
+  // ── Cape (streams behind = left on screen after flip) ──
+  const capeFlap = inAir ? Math.sin(frame * 0.2) * 5 : Math.sin(frame * 0.1) * 2;
+  ctx.fillStyle = '#3d1e0a';
+  ctx.beginPath();
+  ctx.moveTo(-player.w * 0.35, -player.h * 0.22);
+  ctx.lineTo(-player.w * 0.6,   player.h * 0.28 + capeFlap);
+  ctx.lineTo(-player.w * 0.1,   player.h * 0.32);
+  ctx.closePath();
+  ctx.fill();
+
+  // ── Body ──
+  ctx.fillStyle = '#4a3010';
+  roundRect(ctx, -player.w * 0.38, -player.h * 0.33, player.w * 0.76, player.h * 0.66, 5);
+  ctx.fill();
+  ctx.fillStyle = '#6a4820';
+  ctx.fillRect(-player.w * 0.28, -player.h * 0.28, player.w * 0.56, player.h * 0.12);
+  ctx.fillStyle = '#c08030';
+  ctx.fillRect(-6, player.h * 0.02, 12, 7);
+
+  // ── Head ──
+  ctx.fillStyle = '#e8b888';
+  ctx.beginPath();
+  ctx.arc(0, -player.h * 0.37, player.w * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Hat ──
+  ctx.fillStyle = '#5a3a10';
+  ctx.beginPath();
+  ctx.ellipse(0, -player.h * 0.46, player.w * 0.42, player.w * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(-player.w * 0.22, -player.h * 0.65, player.w * 0.44, player.h * 0.22);
+  ctx.fillStyle = '#c08030';
+  ctx.fillRect(-player.w * 0.22, -player.h * 0.47, player.w * 0.44, 4);
+  ctx.fillStyle = '#a0c840';
+  ctx.beginPath();
+  ctx.moveTo(player.w * 0.18, -player.h * 0.62);
+  ctx.lineTo(player.w * 0.36, -player.h * 0.76);
+  ctx.lineTo(player.w * 0.24, -player.h * 0.56);
+  ctx.closePath();
+  ctx.fill();
+
+  // ── Eyes ──
+  ctx.fillStyle = '#2a1000';
+  ctx.beginPath(); ctx.arc(-5, -player.h * 0.36, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 5, -player.h * 0.36, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(-4, -player.h * 0.37, 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 6, -player.h * 0.37, 0.9, 0, Math.PI * 2); ctx.fill();
+
+  // ── Machete ──
+  ctx.save();
+  ctx.translate(player.w * 0.38, -player.h * 0.08);
+  ctx.rotate(player.bladeAngle + (inAir ? -0.55 : 0));
+  ctx.fillStyle = '#d0d8b0';
+  ctx.shadowColor = '#80c050';
+  ctx.shadowBlur  = 6;
+  ctx.beginPath();
+  ctx.moveTo(-2, -player.h * 0.48);
+  ctx.lineTo( 5, -player.h * 0.38);
+  ctx.lineTo( 3,  0);
+  ctx.lineTo(-2,  0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#c08030';
+  ctx.fillRect(-6, -4, 14, 5);
+  ctx.fillStyle = '#5a3010';
+  ctx.fillRect(-2, 1, 5, player.h * 0.2);
+  ctx.restore();
+
+  // ── Legs ──
+  const legSwing = inAir ? 0.3 : Math.sin(frame * 0.24) * 0.38;
+  ctx.save();
+  ctx.translate(-7, player.h * 0.28); ctx.rotate(-legSwing);
+  ctx.fillStyle = '#4a3010'; ctx.fillRect(-4, 0, 9, player.h * 0.3);
+  ctx.fillStyle = '#3a2808'; ctx.fillRect(-5, player.h * 0.27, 11, player.h * 0.1);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(7, player.h * 0.28); ctx.rotate(legSwing);
+  ctx.fillStyle = '#4a3010'; ctx.fillRect(-4, 0, 9, player.h * 0.3);
+  ctx.fillStyle = '#3a2808'; ctx.fillRect(-5, player.h * 0.27, 11, player.h * 0.1);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// =============================================================================
+//  DRAW ENEMIES
+// =============================================================================
+function drawEnemy(e) {
+  ctx.save();
+  ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+
+  if (e.type === 'panther') {
+    // ── Jungle panther ──
+    const bob = Math.sin(frame * 0.22 + e.phase) * 1.5;
+    ctx.translate(0, bob);
+
+    // Body (sleek low shape)
+    ctx.fillStyle = '#1a1a2a';
+    ctx.shadowColor = '#4040a0';
+    ctx.shadowBlur  = 8;
+    ctx.beginPath();
+    ctx.ellipse(0, e.h * 0.05, e.w * 0.46, e.h * 0.33, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Spots pattern
+    ctx.fillStyle = 'rgba(60,60,80,0.6)';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(-e.w * 0.25 + i * e.w * 0.25, e.h * 0.05, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Head
+    ctx.fillStyle = '#252535';
+    ctx.beginPath();
+    ctx.arc(e.w * 0.35, -e.h * 0.12, e.w * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ears
+    ctx.fillStyle = '#1a1a2a';
+    ctx.beginPath();
+    ctx.moveTo(e.w * 0.22, -e.h * 0.28); ctx.lineTo(e.w * 0.16, -e.h * 0.44); ctx.lineTo(e.w * 0.34, -e.h * 0.28); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(e.w * 0.44, -e.h * 0.28); ctx.lineTo(e.w * 0.50, -e.h * 0.44); ctx.lineTo(e.w * 0.36, -e.h * 0.28); ctx.fill();
+
+    // Eyes — glowing yellow
+    ctx.fillStyle = '#f0c020';
+    ctx.shadowColor = '#f0c020'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(e.w * 0.28, -e.h * 0.14, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(e.w * 0.44, -e.h * 0.14, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Fangs
+    ctx.fillStyle = '#eeeeee';
+    ctx.beginPath();
+    ctx.moveTo(e.w * 0.26, -e.h * 0.02); ctx.lineTo(e.w * 0.22, e.h * 0.08); ctx.lineTo(e.w * 0.30, -e.h * 0.02); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(e.w * 0.44, -e.h * 0.02); ctx.lineTo(e.w * 0.40, e.h * 0.08); ctx.lineTo(e.w * 0.48, -e.h * 0.02); ctx.fill();
+
+    // Tail
+    ctx.strokeStyle = '#1a1a2a';
+    ctx.lineWidth = 3;
+    const tailCurve = Math.sin(frame * 0.15 + e.phase) * 12;
+    ctx.beginPath();
+    ctx.moveTo(-e.w * 0.44, e.h * 0.05);
+    ctx.bezierCurveTo(-e.w * 0.7, -e.h * 0.1 + tailCurve, -e.w * 0.85, e.h * 0.3, -e.w * 0.72, e.h * 0.5 + tailCurve);
+    ctx.stroke();
+
+    // Legs
+    const ls = Math.sin(frame * 0.3 + e.phase) * 0.4;
+    ctx.fillStyle = '#1a1a2a';
+    [[-e.w*0.3, ls], [-e.w*0.1, -ls], [e.w*0.1, ls], [e.w*0.3, -ls]].forEach(([lx, rot]) => {
+      ctx.save();
+      ctx.translate(lx, e.h * 0.25);
+      ctx.rotate(rot);
+      ctx.fillRect(-3, 0, 6, e.h * 0.32);
+      ctx.restore();
+    });
+
+  } else {
+    // ── Giant Jungle Beetle ──
+    const wingFlap = Math.sin(frame * 0.25 + e.phase);
+
+    // Shell body
+    ctx.shadowColor = '#20c040';
+    ctx.shadowBlur  = 10;
+    const shellGrad = ctx.createRadialGradient(-3, -3, 2, 0, 0, e.w * 0.46);
+    shellGrad.addColorStop(0, '#50d070');
+    shellGrad.addColorStop(0.6,'#208040');
+    shellGrad.addColorStop(1,  '#104020');
+    ctx.fillStyle = shellGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, e.w * 0.46, e.h * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Shell pattern line
+    ctx.strokeStyle = '#104020';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -e.h * 0.38); ctx.lineTo(0, e.h * 0.38);
+    ctx.stroke();
+
+    // Wing cases (elytra) — flapping slightly
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#30a050';
+    ctx.save();
+    ctx.translate(-e.w * 0.2, 0);
+    ctx.scale(1 + wingFlap * 0.15, 1);
+    ctx.beginPath();
+    ctx.ellipse(-e.w * 0.3, 0, e.w * 0.3, e.h * 0.35, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(e.w * 0.2, 0);
+    ctx.scale(1 + wingFlap * 0.15, 1);
+    ctx.beginPath();
+    ctx.ellipse(e.w * 0.3, 0, e.w * 0.3, e.h * 0.35, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    // Head
+    ctx.fillStyle = '#106030';
+    ctx.beginPath();
+    ctx.arc(0, -e.h * 0.44, e.w * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Horn
+    ctx.fillStyle = '#208040';
+    ctx.beginPath();
+    ctx.moveTo(-3, -e.h * 0.58); ctx.lineTo(0, -e.h * 0.78); ctx.lineTo(3, -e.h * 0.58);
+    ctx.closePath(); ctx.fill();
+
+    // Eyes — glowing red
+    ctx.fillStyle = '#ff3020';
+    ctx.shadowColor = '#ff3020'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(-5, -e.h * 0.46, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 5, -e.h * 0.46, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Antennae
+    ctx.strokeStyle = '#208040';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-4, -e.h * 0.58); ctx.lineTo(-10, -e.h * 0.78); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo( 4, -e.h * 0.58); ctx.lineTo( 10, -e.h * 0.78); ctx.stroke();
+
+    // Legs
+    ctx.strokeStyle = '#104020';
+    ctx.lineWidth = 1.5;
+    [[-e.w*0.42, -e.h*0.1], [-e.w*0.44, e.h*0.05], [-e.w*0.38, e.h*0.2],
+     [ e.w*0.42, -e.h*0.1], [ e.w*0.44, e.h*0.05], [ e.w*0.38, e.h*0.2]].forEach(([lx, ly], idx) => {
+      const dir = lx < 0 ? -1 : 1;
+      ctx.beginPath();
+      ctx.moveTo(lx * 0.5, ly);
+      ctx.lineTo(lx, ly + Math.sin(frame * 0.25 + e.phase + idx) * 4);
+      ctx.stroke();
+    });
+  }
+
+  ctx.restore();
+}
+
+// =============================================================================
+//  UTILITY — rounded rectangle path (no native roundRect for Safari compat)
+// =============================================================================
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// =============================================================================
+//  MAIN GAME LOOP
+// =============================================================================
+function gameLoop() {
+  if (state === 'playing') {
+    update();
+    draw();
+    rafId = requestAnimationFrame(gameLoop);
+  } else if (state === 'dead') {
+    // Finish particle animation after death
+    let alive = false;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12;
+      p.life -= p.decay;
+      if (p.life <= 0) particles.splice(i, 1);
+      else alive = true;
+    }
+    draw();
+    if (alive) rafId = requestAnimationFrame(gameLoop);
+  }
+}
+
+// ── Idle ambient loop on start / death screen ──
+function idleLoop() {
+  if (state !== 'start') return;
+  frame++;
+  for (const layer of bgLayers) layer.offsetX -= speed * layer.scrollFactor * 0.25;
+  for (const s of stars) {
+    s.x -= s.speed * 0.3;
+    s.twinkle += 0.05;
+    if (s.x < -2) s.x = W + 2;
+  }
+  for (const v of vines) {
+    v.phase += 0.015;
+    v.x -= 0.5;
+    if (v.x < -10) { v.x = W + Math.random() * 60; }
+  }
+  draw();
+  requestAnimationFrame(idleLoop);
+}
+
+// =============================================================================
+//  BOOT
+// =============================================================================
+resizeCanvas();
+state = 'start';
+initBackground();
+initPlayer();
+requestAnimationFrame(idleLoop);
+</script>
+</body>
+</html>
